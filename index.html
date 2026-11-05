@@ -149,7 +149,7 @@
             border-radius: 6px;
             text-align: center;
             font-weight: bold;
-            font-size: 16px;
+            font-size: 15px;
             color: #333;
         }
 
@@ -231,7 +231,7 @@
         }
 
         .hidden { display: none !important; }
-        .disabled-card { opacity: 0.6; pointer-events: none; }
+        .disabled-card { opacity: 0.55; pointer-events: none; user-select: none; }
         .disabled-board { opacity: 0.5; pointer-events: none; }
 
         @media (max-width: 800px) {
@@ -255,6 +255,7 @@
                 🟢 Místnost je volná (0/2 řidičů)
             </div>
 
+            <!-- KARTA HRÁČE 1 -->
             <div class="card" id="card-green">
                 <div class="card-header"><span class="dot-green"></span> Tým Taxi Green</div>
                 <div class="input-group" id="p1-input-group">
@@ -267,6 +268,7 @@
                 <div class="status-box hidden" id="status-p1">Čekám na soupeře...</div>
             </div>
 
+            <!-- KARTA HRÁČE 2 -->
             <div class="card disabled-card" id="card-lucky">
                 <div class="card-header" id="header-lucky">
                     <span class="dot-green hidden" id="ready-dot"></span> 
@@ -274,12 +276,13 @@
                     <span id="default-lucky-title"><span class="dot-yellow"></span> Tým Taxi</span>
                 </div>
                 <div class="input-group" id="p2-input-group">
+                    <label>Jméno druhého řidiče:</label>
                     <input type="text" id="p2-input" placeholder="Jméno druhého řidiče...">
                 </div>
                 <button class="btn-black" id="btn-p2" onclick="registerP2()">
                     <span class="btn-icon" id="icon-lucky"></span> Vyzvat a hrát!
                 </button>
-                <div class="status-box hidden" id="status-p2">Připraven v zápase</div>
+                <div class="status-box hidden" id="status-p2">Čeká se na druhého hráče...</div>
             </div>
             
             <button class="btn-green hidden" id="btn-restart" onclick="resetGame()" style="margin-top: 10px;">
@@ -287,7 +290,7 @@
             </button>
 
             <button class="btn-danger hidden" id="btn-leave" onclick="leaveRoom()">
-                🚪 Uvolnit místnost pro další
+                🚪 Uvolnit místnost (Odejit)
             </button>
         </div>
 
@@ -309,11 +312,11 @@
         </div>
     </div>
 
-    <!-- Knihovna MQTT.js pro okamžité spojení dvou počítačů přes internet bez nutnosti registrace -->
+    <!-- Knihovna MQTT.js pro komunikaci mezi dvěma počítači v reálném čase -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
     <script>
-        // --- 1. TAXI GREEN A TAXI IKONY ---
+        // --- 1. IKONY VOZŮ ---
         const svgGreen = `<img src="taxi-green.jpg" class="car-svg" style="width: 100%; height: 100%; object-fit: contain;" alt="Taxi Green">`;
         const svgLucky = `<img src="taxi skoda.jpg" class="car-svg" style="width: 100%; height: 100%; object-fit: contain;" alt="Taxi">`;
 
@@ -322,15 +325,22 @@
         document.getElementById("icon-lucky").innerHTML = svgLucky;
         document.getElementById("score-icon-lucky").innerHTML = svgLucky;
 
-        // --- 2. VÝCHOZÍ STAV HRY ---
-        const STORAGE_KEY = "domazlice_taxi_state_v1";
-        const TOPIC = "domazlice-taxi-battle-2026/mistnost-1/state";
+        // --- 2. UNIKÁTNÍ IDENTIFIKACE TOHOTO POČÍTAČE / PROHLÍŽEČE ---
+        // Každý počítač dostane své unikátní ID, díky kterému hra pozná, kdo je Hráč 1 a kdo Hráč 2
+        let myDeviceId = localStorage.getItem("taxi_device_id");
+        if (!myDeviceId) {
+            myDeviceId = "pc_" + Math.random().toString(36).substring(2, 10) + "_" + Date.now();
+            localStorage.setItem("taxi_device_id", myDeviceId);
+        }
 
-        let myRole = sessionStorage.getItem("taxiRole") ? parseInt(sessionStorage.getItem("taxiRole")) : null;
+        const STORAGE_KEY = "domazlice_taxi_state_v2";
+        const TOPIC = "domazlice-taxi-battle-2026/mistnost-hlavni/state-v2";
 
         let gameState = {
             player1: "",
+            player1Id: "",
             player2: "",
+            player2Id: "",
             currentPlayer: 1,
             board: Array(16).fill(null),
             gameActive: false,
@@ -338,13 +348,13 @@
             updatedAt: 0
         };
 
-        // Načtení z lokální paměti (pokud už v prohlížeči něco je)
+        // Načtení posledního známého stavu
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
             try { gameState = JSON.parse(saved); } catch (e) {}
         }
 
-        // Vytvoření prázdné herní desky 4x4
+        // Vytvoření herní sítě 4x4
         const boardEl = document.getElementById("board");
         function createEmptyBoard() {
             boardEl.innerHTML = "";
@@ -358,17 +368,22 @@
         }
         createEmptyBoard();
 
-        // --- 3. KOMUNIKACE MEZI POČÍTAČI (WebSockets MQTT + BroadcastChannel) ---
+        // Zjištění, jakou roli má tento konkrétní počítač
+        function getMyRole() {
+            if (gameState.player1 && gameState.player1Id === myDeviceId) return 1;
+            if (gameState.player2 && gameState.player2Id === myDeviceId) return 2;
+            return null;
+        }
+
+        // --- 3. SÍŤOVÁ SYNCHRONIZACE MEZI POČÍTAČI ---
         let mqttClient = null;
 
-        // A) Propojení přes internet (mezi dvěma různými počítači)
         if (typeof mqtt !== "undefined") {
             mqttClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
-                clientId: "taxi_domazlice_" + Math.random().toString(16).substring(2, 10)
+                clientId: "domazlice_" + Math.random().toString(16).substring(2, 10)
             });
 
             mqttClient.on("connect", () => {
-                // Přihlášení k odběru místnosti (retained zpráva hned pošle aktuální stav místnosti)
                 mqttClient.subscribe(TOPIC, { qos: 1 });
             });
 
@@ -382,11 +397,7 @@
             });
         }
 
-        // B) Propojení v rámci jednoho počítače (mezi záložkami prohlížeče)
-        const localChannel = ("BroadcastChannel" in window) ? new BroadcastChannel("taxi_battle_channel") : null;
-        if (localChannel) {
-            localChannel.onmessage = (e) => applyIncomingState(e.data);
-        }
+        // Podpora pro okamžitou aktualizaci na lokálním PC
         window.addEventListener("storage", (e) => {
             if (e.key === STORAGE_KEY && e.newValue) {
                 try { applyIncomingState(JSON.parse(e.newValue)); } catch (err) {}
@@ -397,38 +408,26 @@
             if (!incoming) return;
             gameState = incoming;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
-
-            // Pokud byla místnost uvolněna, smažeme i roli tohoto počítače
-            if (!gameState.player1 && !gameState.player2) {
-                myRole = null;
-                sessionStorage.removeItem("taxiRole");
-            }
             updateUI();
         }
 
-        // Odeslání nového stavu okamžitě na obrazovku i druhému počítači
         function syncState() {
             gameState.updatedAt = Date.now();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
-            
-            // 1. Okamžitě překreslíme vlastní obrazovku (bez čekání na síť!)
             updateUI();
 
-            // 2. Pošleme změnu přes lokální kanál
-            if (localChannel) localChannel.postMessage(gameState);
-
-            // 3. Pošleme změnu přes internet druhému počítači (retain: true zajistí, že stav v místnosti zůstane uložen pro nově příchozího hráče)
             if (mqttClient && mqttClient.connected) {
                 mqttClient.publish(TOPIC, JSON.stringify(gameState), { qos: 1, retain: true });
             }
         }
 
-        // --- 4. VYKRESLENÍ ROZHRANÍ PODLE STAVU MÍSTNOSTI ---
+        // --- 4. VYKRESLENÍ OBRAZOVKY A ZAMYKÁNÍ POLÍČEK ---
         function updateUI() {
             const { player1, player2, currentPlayer, board, gameActive, winnerMsg } = gameState;
+            const myRole = getMyRole();
             const badge = document.getElementById("room-status-badge");
 
-            // Horní stav místnosti
+            // 1. HORNÍ BADGE STAVU MÍSTNOSTI
             if (!player1 && !player2) {
                 badge.innerHTML = "🟢 Místnost je volná (0/2 řidičů)";
                 badge.style.background = "#1e293b";
@@ -438,64 +437,98 @@
                 badge.style.background = "#b45309";
                 document.getElementById("btn-leave").classList.remove("hidden");
             } else {
-                badge.innerHTML = `🔴 Místnost obsazena (2/2) – Hraje se zápas!`;
+                badge.innerHTML = `🔴 Místnost obsazena (2/2) – Hraje se: <strong>${player1}</strong> vs. <strong>${player2}</strong>`;
                 badge.style.background = "#991b1b";
                 document.getElementById("btn-leave").classList.remove("hidden");
             }
 
-            // Karta Hráče 1 (Taxi Green)
+            // 2. KARTA HRÁČE 1 (TAXI GREEN)
+            const cardGreen = document.getElementById("card-green");
+            const p1InputGroup = document.getElementById("p1-input-group");
+            const btnP1 = document.getElementById("btn-p1");
+            const statusP1 = document.getElementById("status-p1");
+
             if (!player1) {
-                document.getElementById("p1-input-group").classList.remove("hidden");
-                document.getElementById("btn-p1").classList.remove("hidden");
-                document.getElementById("status-p1").classList.add("hidden");
-                document.getElementById("card-green").classList.remove("disabled-card");
+                // Místo pro Hráče 1 je volné
+                cardGreen.classList.remove("disabled-card");
+                p1InputGroup.classList.remove("hidden");
+                btnP1.classList.remove("hidden");
+                statusP1.classList.add("hidden");
             } else {
-                document.getElementById("p1-input-group").classList.add("hidden");
-                document.getElementById("btn-p1").classList.add("hidden");
-                const statusP1 = document.getElementById("status-p1");
+                // Místo Hráče 1 už je obsazené (schováme input a tlačítko, nikdo jiný už sem nemůže psát)
+                p1InputGroup.classList.add("hidden");
+                btnP1.classList.add("hidden");
                 statusP1.classList.remove("hidden");
-                statusP1.innerHTML = player2 
-                    ? `Řidič: <strong>${player1}</strong> ${myRole === 1 ? "(Ty)" : ""}`
-                    : `Obsazeno: <strong>${player1}</strong> čeká na soupeře...`;
+
+                if (myRole === 1) {
+                    cardGreen.classList.remove("disabled-card");
+                    statusP1.innerHTML = player2 
+                        ? `✅ Řidič: <strong>${player1} (Ty)</strong>` 
+                        : `✅ Jsi zapsán jako: <strong>${player1}</strong><br><span style="font-size:13px; font-weight:normal; color:#555;">Čekám na připojení soupeře...</span>`;
+                } else {
+                    cardGreen.classList.add("disabled-card");
+                    statusP1.innerHTML = `🔒 Obsazeno řidičem: <strong>${player1}</strong>`;
+                }
             }
 
-            // Karta Hráče 2 (Tým Taxi)
+            // 3. KARTA HRÁČE 2 (TÝM TAXI)
+            const cardLucky = document.getElementById("card-lucky");
+            const p2InputGroup = document.getElementById("p2-input-group");
+            const btnP2 = document.getElementById("btn-p2");
+            const statusP2 = document.getElementById("status-p2");
+            const defaultLuckyTitle = document.getElementById("default-lucky-title");
+            const readyDot = document.getElementById("ready-dot");
+            const p1ReadyText = document.getElementById("p1-ready-text");
+
             if (!player1) {
-                document.getElementById("card-lucky").classList.add("disabled-card");
-                document.getElementById("default-lucky-title").classList.remove("hidden");
-                document.getElementById("ready-dot").classList.add("hidden");
-                document.getElementById("p1-ready-text").classList.add("hidden");
-                document.getElementById("p2-input-group").classList.remove("hidden");
-                document.getElementById("btn-p2").classList.remove("hidden");
-                document.getElementById("btn-p2").disabled = false;
-                document.getElementById("btn-p2").innerHTML = `<span class="btn-icon">${svgLucky}</span> Vyzvat a hrát!`;
-                document.getElementById("status-p2").classList.add("hidden");
+                // Hráč 1 ještě není zapsaný -> Karta 2 je zamčená
+                cardLucky.classList.add("disabled-card");
+                defaultLuckyTitle.classList.remove("hidden");
+                readyDot.classList.add("hidden");
+                p1ReadyText.classList.add("hidden");
+                p2InputGroup.classList.remove("hidden");
+                btnP2.classList.remove("hidden");
+                statusP2.classList.add("hidden");
             } else if (player1 && !player2) {
-                document.getElementById("default-lucky-title").classList.add("hidden");
-                document.getElementById("ready-dot").classList.remove("hidden");
-                const p1Ready = document.getElementById("p1-ready-text");
-                p1Ready.classList.remove("hidden");
-                p1Ready.innerHTML = `<strong>${player1} (Green)</strong> je připraven! <br><span style="font-size: 14px; font-weight: normal; margin-top: 5px; display: inline-block;"><span class="dot-yellow"></span> Tým Taxi</span>`;
+                // Hráč 1 je zapsaný a čeká na Hráče 2
+                defaultLuckyTitle.classList.add("hidden");
+                readyDot.classList.remove("hidden");
+                p1ReadyText.classList.remove("hidden");
+                p1ReadyText.innerHTML = `<strong>${player1} (Green)</strong> je připraven! <br><span style="font-size: 14px; font-weight: normal; margin-top: 5px; display: inline-block;"><span class="dot-yellow"></span> Tým Taxi</span>`;
 
-                document.getElementById("p2-input-group").classList.remove("hidden");
-                document.getElementById("btn-p2").classList.remove("hidden");
-                document.getElementById("status-p2").classList.add("hidden");
-
-                // Odemkneme kartu pro druhého hráče
-                document.getElementById("card-lucky").classList.remove("disabled-card");
-                document.getElementById("p2-input").disabled = false;
-                document.getElementById("btn-p2").disabled = false;
-                document.getElementById("btn-p2").innerHTML = `<span class="btn-icon">${svgLucky}</span> Vyzvat a hrát!`;
+                if (myRole === 1) {
+                    // JÁ JSEM HRÁČ 1 -> Moje druhá karta na mém počítači MUSÍ BÝT ZABLOKOVANÁ!
+                    cardLucky.classList.add("disabled-card");
+                    p2InputGroup.classList.add("hidden");
+                    btnP2.classList.add("hidden");
+                    statusP2.classList.remove("hidden");
+                    statusP2.innerHTML = `⏳ Čeká se, až se připojí soupeř z druhého počítače...`;
+                } else {
+                    // JÁ JSEM DRUHÝ POČÍTAČ -> Mám odemčené pouze toto druhé políčko!
+                    cardLucky.classList.remove("disabled-card");
+                    p2InputGroup.classList.remove("hidden");
+                    btnP2.classList.remove("hidden");
+                    statusP2.classList.add("hidden");
+                }
             } else if (player1 && player2) {
-                document.getElementById("card-lucky").classList.remove("disabled-card");
-                document.getElementById("p2-input-group").classList.add("hidden");
-                document.getElementById("btn-p2").classList.add("hidden");
-                const statusP2 = document.getElementById("status-p2");
+                // Oba hráči už jsou zapsaní -> ukážeme jméno druhého hráče
+                defaultLuckyTitle.classList.remove("hidden");
+                readyDot.classList.add("hidden");
+                p1ReadyText.classList.add("hidden");
+                p2InputGroup.classList.add("hidden");
+                btnP2.classList.add("hidden");
                 statusP2.classList.remove("hidden");
-                statusP2.innerHTML = `Řidič: <strong>${player2}</strong> ${myRole === 2 ? "(Ty)" : ""}`;
+
+                if (myRole === 2) {
+                    cardLucky.classList.remove("disabled-card");
+                    statusP2.innerHTML = `✅ Řidič: <strong>${player2} (Ty)</strong>`;
+                } else {
+                    cardLucky.classList.add("disabled-card");
+                    statusP2.innerHTML = `🔒 Soupeř: <strong>${player2}</strong>`;
+                }
             }
 
-            // Skóre a zpřístupnění plochy
+            // 4. HORNÍ SKÓRE (SCOREBOARD) - Zde se okamžitě propíše jméno Hráče 1 i Hráče 2
             document.getElementById("score-p1").innerText = player1 ? `${player1} (Green)` : "Hráč 1 (Green)";
             document.getElementById("score-p2").innerText = player2 ? `${player2} (Taxi)` : "Hráč 2 (Taxi)";
 
@@ -507,7 +540,7 @@
                 document.getElementById("board-container").classList.add("disabled-board");
             }
 
-            // Vykreslení políček 4x4
+            // 5. VYKRESLENÍ AUTÍČEK NA HERNÍ PLOŠE
             for (let i = 0; i < 16; i++) {
                 const cellEl = document.querySelector(`.cell[data-index='${i}']`);
                 if (board[i] === 1) {
@@ -522,23 +555,27 @@
                 }
             }
 
-            // Hlášení dispečinku
+            // 6. ZPRÁVA DISPEČINKU
             const msgBox = document.getElementById("message-box");
             if (!player1) {
-                msgBox.innerHTML = `Dispečink: "Čekám na přihlášení obou řidičů."`;
+                msgBox.innerHTML = `Dispečink: "Čekám na přihlášení prvního řidiče (Tým Taxi Green)."`;
                 document.getElementById("btn-restart").classList.add("hidden");
             } else if (player1 && !player2) {
-                msgBox.innerHTML = `Dispečink: "Místnost je obsazena hráčem <strong>${player1}</strong>. Čeká se na přihlášení druhého řidiče!"`;
+                if (myRole === 1) {
+                    msgBox.innerHTML = `Dispečink: "Jsi přihlášen jako <strong>${player1}</strong>. Počkej, až se na druhém počítači zapíše soupeř."`;
+                } else {
+                    msgBox.innerHTML = `Dispečink: "V místnosti čeká <strong>${player1}</strong>! Zadej vlevo své jméno za Tým Taxi a spusť hru."`;
+                }
                 document.getElementById("btn-restart").classList.add("hidden");
             } else if (gameActive) {
                 const activeName = currentPlayer === 1 ? player1 : player2;
                 let turnInfo = "";
-                if (myRole === 1 || myRole === 2) {
-                    turnInfo = (myRole === currentPlayer) 
-                        ? " <span style='color: #16a34a; font-weight: bold;'>(Jsi na tahu!)</span>" 
-                        : " (Čekáš na tah soupeře...)";
+                if (myRole === currentPlayer) {
+                    turnInfo = " <span style='color: #16a34a; font-weight: bold;'>👉 Jsi na tahu! Klikni do pole.</span>";
+                } else if (myRole !== null) {
+                    turnInfo = " <span style='color: #d97706;'>(Čekáš na tah soupeře...)</span>";
                 }
-                msgBox.innerHTML = `Dispečink: "Startujeme! Kdo dřív zaparkuje 4 auta? Na tahu je <strong>${activeName}</strong>.${turnInfo}"`;
+                msgBox.innerHTML = `Dispečink: "Hrají <strong>${player1}</strong> vs. <strong>${player2}</strong>. Na tahu je <strong>${activeName}</strong>.${turnInfo}"`;
                 document.getElementById("btn-restart").classList.add("hidden");
             } else if (winnerMsg) {
                 msgBox.innerHTML = winnerMsg;
@@ -546,16 +583,16 @@
             }
         }
 
-        // --- 5. HERNÍ FUNKCE ---
+        // --- 5. HERNÍ AKCE ---
         function registerP1() {
+            if (gameState.player1) return alert("První tým už je obsazený!");
             const input = document.getElementById("p1-input");
             if (!input.value.trim()) return alert("Zadej jméno!");
-            
-            myRole = 1;
-            sessionStorage.setItem("taxiRole", "1");
 
             gameState.player1 = input.value.trim();
+            gameState.player1Id = myDeviceId; // Zamkne Hráče 1 pro tento počítač
             gameState.player2 = "";
+            gameState.player2Id = "";
             gameState.board = Array(16).fill(null);
             gameState.gameActive = false;
             gameState.winnerMsg = "";
@@ -565,19 +602,17 @@
         }
 
         function registerP2() {
-            const input = document.getElementById("p2-input");
-            if (!input.value.trim()) return alert("Zadej jméno!");
-
-            // Pokud ještě na tomto počítači nemám roli Hráče 1, stanu se Hráčem 2
-            if (myRole !== 1) {
-                myRole = 2;
-                sessionStorage.setItem("taxiRole", "2");
-            } else {
-                // Pokud zkoušíš hru sám na jednom PC v jednom okně, povolíme lokální testování
-                myRole = null;
+            const myRole = getMyRole();
+            if (myRole === 1) {
+                return alert("Už jsi přihlášen jako Hráč 1! Druhého hráče musí vyplnit soupeř ze svého počítače.");
             }
+            if (gameState.player2) return alert("Druhý tým už je obsazený!");
+
+            const input = document.getElementById("p2-input");
+            if (!input.value.trim()) return alert("Zadej jméno druhého řidiče!");
 
             gameState.player2 = input.value.trim();
+            gameState.player2Id = myDeviceId; // Zamkne Hráče 2 pro druhý počítač
             gameState.currentPlayer = 1;
             gameState.board = Array(16).fill(null);
             gameState.gameActive = true;
@@ -594,9 +629,13 @@
 
             if (!gameState.gameActive || gameState.board[index] !== null) return;
 
-            // Pokud hrají dva oddělené počítače, pohlídáme, aby každý táhl jen za sebe
-            if ((myRole === 1 || myRole === 2) && myRole !== gameState.currentPlayer) {
-                alert("Teď nejsi na tahu! Na tahu je druhý počítač.");
+            const myRole = getMyRole();
+            if (myRole !== gameState.currentPlayer) {
+                if (myRole === null) {
+                    alert("Nejsi zapojen do této hry (místnost je plná).");
+                } else {
+                    alert("Teď nejsi na tahu! Počkej, až táhne soupeř na druhém počítači.");
+                }
                 return;
             }
 
@@ -643,11 +682,11 @@
         }
 
         function leaveRoom() {
-            myRole = null;
-            sessionStorage.removeItem("taxiRole");
             gameState = {
                 player1: "",
+                player1Id: "",
                 player2: "",
+                player2Id: "",
                 currentPlayer: 1,
                 board: Array(16).fill(null),
                 gameActive: false,
