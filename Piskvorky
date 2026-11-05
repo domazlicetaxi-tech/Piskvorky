@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domažlice Taxi Battle</title>
+    <style>
+        :root {
+            --green-main: #2ea043;
+            --green-dark: #1b5e20;
+            --lucky-yellow: #FFC107;
+            --dark: #222;
+            --bg-color: #e2e8f0;
+            --card-bg: #ffffff;
+            --board-bg: #eaedf1;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .banner-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+        .banner {
+            background: white;
+            padding: 10px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid #cbd5e1;
+            z-index: 10;
+        }
+        .banner::before, .banner::after {
+            content: "";
+            position: absolute;
+            top: 10px;
+            bottom: -10px;
+            width: 30px;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
+            z-index: -1;
+        }
+        .banner::before { left: -20px; transform: skewX(-20deg); box-shadow: -2px 2px 4px rgba(0,0,0,0.05); }
+        .banner::after { right: -20px; transform: skewX(20deg); box-shadow: 2px 2px 4px rgba(0,0,0,0.05); }
+
+        .layout {
+            display: flex;
+            gap: 25px;
+            max-width: 1100px;
+            width: 100%;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+
+        .sidebar {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .main-content {
+            flex: 2;
+            min-width: 500px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border: 1px solid #cbd5e1;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border: 1px solid #cbd5e1;
+            position: relative;
+            overflow: hidden;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .dot-green { width: 15px; height: 15px; background: var(--green-main); border-radius: 50%; display: inline-block; }
+        .dot-yellow { width: 15px; height: 15px; background: var(--lucky-yellow); border-radius: 50%; display: inline-block; }
+        
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; font-size: 14px; margin-bottom: 5px; color: #555; }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background: #f8fafc;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            color: white;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-green { background: var(--green-main); }
+        .btn-black { background: #111; color: var(--lucky-yellow); border: 1px solid var(--lucky-yellow); }
+        .btn-danger { background: #dc2626; color: white; margin-top: 5px; font-size: 14px; padding: 10px; }
+
+        .status-box {
+            margin-top: 15px;
+            padding: 12px;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .room-badge {
+            background: #1e293b;
+            color: #f8fafc;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            text-align: center;
+            border: 1px solid #334155;
+            transition: background 0.3s;
+        }
+
+        .scoreboard {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #cbd5e1;
+        }
+        .scoreboard span { display: flex; align-items: center; gap: 8px; }
+        .text-green { color: var(--green-main); }
+        .text-black { color: #111; }
+
+        .message-box {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #475569;
+        }
+
+        .board-container {
+            background: var(--board-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+        }
+        .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        
+        .cell {
+            background: #ffffff;
+            aspect-ratio: 1;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            transition: all 0.2s;
+        }
+        .cell:hover:not(.taken) {
+            background: #f1f5f9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .cell.taken { cursor: default; }
+
+        .car-svg {
+            width: 90%;
+            height: 90%;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        .btn-icon { width: 45px; height: 30px; display: inline-flex; align-items: center; justify-content: center; }
+        
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .hidden { display: none !important; }
+        .disabled-card { opacity: 0.6; pointer-events: none; }
+        .disabled-board { opacity: 0.5; pointer-events: none; }
+
+        @media (max-width: 800px) {
+            .layout { flex-direction: column; }
+            .main-content { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="banner-container">
+        <div class="banner">
+            🏁 🚕 Domažlice Taxi Battle 🏆 🇨🇿
+        </div>
+    </div>
+
+    <div class="layout">
+        <!-- Ovládání -->
+        <div class="sidebar">
+            <div class="room-badge" id="room-status-badge">
+                🟢 Místnost je volná (0/2 řidičů)
+            </div>
+
+            <div class="card" id="card-green">
+                <div class="card-header"><span class="dot-green"></span> Tým Taxi Green</div>
+                <div class="input-group" id="p1-input-group">
+                    <label>Jméno řidiče:</label>
+                    <input type="text" id="p1-input" placeholder="Zadej jméno...">
+                </div>
+                <button class="btn-green" id="btn-p1" onclick="registerP1()">
+                    <span class="btn-icon" id="icon-green"></span> Zapsat a čekat
+                </button>
+                <div class="status-box hidden" id="status-p1">Čekám na soupeře...</div>
+            </div>
+
+            <div class="card disabled-card" id="card-lucky">
+                <div class="card-header" id="header-lucky">
+                    <span class="dot-green hidden" id="ready-dot"></span> 
+                    <span id="p1-ready-text" class="hidden">Hráč 1 je ready!</span>
+                    <span id="default-lucky-title"><span class="dot-yellow"></span> Tým Taxi</span>
+                </div>
+                <div class="input-group" id="p2-input-group">
+                    <input type="text" id="p2-input" placeholder="Jméno druhého řidiče...">
+                </div>
+                <button class="btn-black" id="btn-p2" onclick="registerP2()">
+                    <span class="btn-icon" id="icon-lucky"></span> Vyzvat a hrát!
+                </button>
+                <div class="status-box hidden" id="status-p2">Připraven v zápase</div>
+            </div>
+            
+            <button class="btn-green hidden" id="btn-restart" onclick="resetGame()" style="margin-top: 10px;">
+                🔄 Hrát novou hru (stejní hráči)
+            </button>
+
+            <button class="btn-danger hidden" id="btn-leave" onclick="leaveRoom()">
+                🚪 Uvolnit místnost pro další
+            </button>
+        </div>
+
+        <!-- Herní plocha -->
+        <div class="main-content">
+            <div class="scoreboard disabled-board" id="scoreboard">
+                <span class="text-green"><span class="btn-icon" id="score-icon-green"></span> <span id="score-p1">Hráč 1 (Green)</span></span>
+                <span style="color:#888; font-size:16px;">vs.</span>
+                <span class="text-black"><span class="dot-yellow"></span> <span id="score-p2">Hráč 2 (Taxi)</span> <span class="btn-icon" id="score-icon-lucky"></span></span>
+            </div>
+
+            <div class="message-box" id="message-box">
+                Dispečink: "Čekám na přihlášení obou řidičů."
+            </div>
+
+            <div class="board-container disabled-board" id="board-container">
+                <div class="board" id="board"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Knihovna MQTT.js pro okamžité spojení dvou počítačů přes internet bez nutnosti registrace -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <script>
+        // --- 1. TAXI GREEN A TAXI IKONY ---
+        const svgGreen = `<img src="taxi-green.jpg" class="car-svg" style="width: 100%; height: 100%; object-fit: contain;" alt="Taxi Green">`;
+        const svgLucky = `<img src="taxi skoda.jpg" class="car-svg" style="width: 100%; height: 100%; object-fit: contain;" alt="Taxi">`;
+
+        document.getElementById("icon-green").innerHTML = svgGreen;
+        document.getElementById("score-icon-green").innerHTML = svgGreen;
+        document.getElementById("icon-lucky").innerHTML = svgLucky;
+        document.getElementById("score-icon-lucky").innerHTML = svgLucky;
+
+        // --- 2. VÝCHOZÍ STAV HRY ---
+        const STORAGE_KEY = "domazlice_taxi_state_v1";
+        const TOPIC = "domazlice-taxi-battle-2026/mistnost-1/state";
+
+        let myRole = sessionStorage.getItem("taxiRole") ? parseInt(sessionStorage.getItem("taxiRole")) : null;
+
+        let gameState = {
+            player1: "",
+            player2: "",
+            currentPlayer: 1,
+            board: Array(16).fill(null),
+            gameActive: false,
+            winnerMsg: "",
+            updatedAt: 0
+        };
+
+        // Načtení z lokální paměti (pokud už v prohlížeči něco je)
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try { gameState = JSON.parse(saved); } catch (e) {}
+        }
+
+        // Vytvoření prázdné herní desky 4x4
+        const boardEl = document.getElementById("board");
+        function createEmptyBoard() {
+            boardEl.innerHTML = "";
+            for (let i = 0; i < 16; i++) {
+                const cell = document.createElement("div");
+                cell.classList.add("cell");
+                cell.dataset.index = i;
+                cell.addEventListener("click", handleMove);
+                boardEl.appendChild(cell);
+            }
+        }
+        createEmptyBoard();
+
+        // --- 3. KOMUNIKACE MEZI POČÍTAČI (WebSockets MQTT + BroadcastChannel) ---
+        let mqttClient = null;
+
+        // A) Propojení přes internet (mezi dvěma různými počítači)
+        if (typeof mqtt !== "undefined") {
+            mqttClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+                clientId: "taxi_domazlice_" + Math.random().toString(16).substring(2, 10)
+            });
+
+            mqttClient.on("connect", () => {
+                // Přihlášení k odběru místnosti (retained zpráva hned pošle aktuální stav místnosti)
+                mqttClient.subscribe(TOPIC, { qos: 1 });
+            });
+
+            mqttClient.on("message", (topic, message) => {
+                if (topic === TOPIC) {
+                    try {
+                        const incoming = JSON.parse(message.toString());
+                        applyIncomingState(incoming);
+                    } catch (e) {}
+                }
+            });
+        }
+
+        // B) Propojení v rámci jednoho počítače (mezi záložkami prohlížeče)
+        const localChannel = ("BroadcastChannel" in window) ? new BroadcastChannel("taxi_battle_channel") : null;
+        if (localChannel) {
+            localChannel.onmessage = (e) => applyIncomingState(e.data);
+        }
+        window.addEventListener("storage", (e) => {
+            if (e.key === STORAGE_KEY && e.newValue) {
+                try { applyIncomingState(JSON.parse(e.newValue)); } catch (err) {}
+            }
+        });
+
+        function applyIncomingState(incoming) {
+            if (!incoming) return;
+            gameState = incoming;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+
+            // Pokud byla místnost uvolněna, smažeme i roli tohoto počítače
+            if (!gameState.player1 && !gameState.player2) {
+                myRole = null;
+                sessionStorage.removeItem("taxiRole");
+            }
+            updateUI();
+        }
+
+        // Odeslání nového stavu okamžitě na obrazovku i druhému počítači
+        function syncState() {
+            gameState.updatedAt = Date.now();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+            
+            // 1. Okamžitě překreslíme vlastní obrazovku (bez čekání na síť!)
+            updateUI();
+
+            // 2. Pošleme změnu přes lokální kanál
+            if (localChannel) localChannel.postMessage(gameState);
+
+            // 3. Pošleme změnu přes internet druhému počítači (retain: true zajistí, že stav v místnosti zůstane uložen pro nově příchozího hráče)
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(TOPIC, JSON.stringify(gameState), { qos: 1, retain: true });
+            }
+        }
+
+        // --- 4. VYKRESLENÍ ROZHRANÍ PODLE STAVU MÍSTNOSTI ---
+        function updateUI() {
+            const { player1, player2, currentPlayer, board, gameActive, winnerMsg } = gameState;
+            const badge = document.getElementById("room-status-badge");
+
+            // Horní stav místnosti
+            if (!player1 && !player2) {
+                badge.innerHTML = "🟢 Místnost je volná (0/2 řidičů)";
+                badge.style.background = "#1e293b";
+                document.getElementById("btn-leave").classList.add("hidden");
+            } else if (player1 && !player2) {
+                badge.innerHTML = `🟡 Místnost obsazena (1/2) – čeká <strong>${player1}</strong>`;
+                badge.style.background = "#b45309";
+                document.getElementById("btn-leave").classList.remove("hidden");
+            } else {
+                badge.innerHTML = `🔴 Místnost obsazena (2/2) – Hraje se zápas!`;
+                badge.style.background = "#991b1b";
+                document.getElementById("btn-leave").classList.remove("hidden");
+            }
+
+            // Karta Hráče 1 (Taxi Green)
+            if (!player1) {
+                document.getElementById("p1-input-group").classList.remove("hidden");
+                document.getElementById("btn-p1").classList.remove("hidden");
+                document.getElementById("status-p1").classList.add("hidden");
+                document.getElementById("card-green").classList.remove("disabled-card");
+            } else {
+                document.getElementById("p1-input-group").classList.add("hidden");
+                document.getElementById("btn-p1").classList.add("hidden");
+                const statusP1 = document.getElementById("status-p1");
+                statusP1.classList.remove("hidden");
+                statusP1.innerHTML = player2 
+                    ? `Řidič: <strong>${player1}</strong> ${myRole === 1 ? "(Ty)" : ""}`
+                    : `Obsazeno: <strong>${player1}</strong> čeká na soupeře...`;
+            }
+
+            // Karta Hráče 2 (Tým Taxi)
+            if (!player1) {
+                document.getElementById("card-lucky").classList.add("disabled-card");
+                document.getElementById("default-lucky-title").classList.remove("hidden");
+                document.getElementById("ready-dot").classList.add("hidden");
+                document.getElementById("p1-ready-text").classList.add("hidden");
+                document.getElementById("p2-input-group").classList.remove("hidden");
+                document.getElementById("btn-p2").classList.remove("hidden");
+                document.getElementById("btn-p2").disabled = false;
+                document.getElementById("btn-p2").innerHTML = `<span class="btn-icon">${svgLucky}</span> Vyzvat a hrát!`;
+                document.getElementById("status-p2").classList.add("hidden");
+            } else if (player1 && !player2) {
+                document.getElementById("default-lucky-title").classList.add("hidden");
+                document.getElementById("ready-dot").classList.remove("hidden");
+                const p1Ready = document.getElementById("p1-ready-text");
+                p1Ready.classList.remove("hidden");
+                p1Ready.innerHTML = `<strong>${player1} (Green)</strong> je připraven! <br><span style="font-size: 14px; font-weight: normal; margin-top: 5px; display: inline-block;"><span class="dot-yellow"></span> Tým Taxi</span>`;
+
+                document.getElementById("p2-input-group").classList.remove("hidden");
+                document.getElementById("btn-p2").classList.remove("hidden");
+                document.getElementById("status-p2").classList.add("hidden");
+
+                // Odemkneme kartu pro druhého hráče
+                document.getElementById("card-lucky").classList.remove("disabled-card");
+                document.getElementById("p2-input").disabled = false;
+                document.getElementById("btn-p2").disabled = false;
+                document.getElementById("btn-p2").innerHTML = `<span class="btn-icon">${svgLucky}</span> Vyzvat a hrát!`;
+            } else if (player1 && player2) {
+                document.getElementById("card-lucky").classList.remove("disabled-card");
+                document.getElementById("p2-input-group").classList.add("hidden");
+                document.getElementById("btn-p2").classList.add("hidden");
+                const statusP2 = document.getElementById("status-p2");
+                statusP2.classList.remove("hidden");
+                statusP2.innerHTML = `Řidič: <strong>${player2}</strong> ${myRole === 2 ? "(Ty)" : ""}`;
+            }
+
+            // Skóre a zpřístupnění plochy
+            document.getElementById("score-p1").innerText = player1 ? `${player1} (Green)` : "Hráč 1 (Green)";
+            document.getElementById("score-p2").innerText = player2 ? `${player2} (Taxi)` : "Hráč 2 (Taxi)";
+
+            if (player1 && player2) {
+                document.getElementById("scoreboard").classList.remove("disabled-board");
+                document.getElementById("board-container").classList.remove("disabled-board");
+            } else {
+                document.getElementById("scoreboard").classList.add("disabled-board");
+                document.getElementById("board-container").classList.add("disabled-board");
+            }
+
+            // Vykreslení políček 4x4
+            for (let i = 0; i < 16; i++) {
+                const cellEl = document.querySelector(`.cell[data-index='${i}']`);
+                if (board[i] === 1) {
+                    cellEl.innerHTML = svgGreen;
+                    cellEl.classList.add("taken");
+                } else if (board[i] === 2) {
+                    cellEl.innerHTML = svgLucky;
+                    cellEl.classList.add("taken");
+                } else {
+                    cellEl.innerHTML = "";
+                    cellEl.classList.remove("taken");
+                }
+            }
+
+            // Hlášení dispečinku
+            const msgBox = document.getElementById("message-box");
+            if (!player1) {
+                msgBox.innerHTML = `Dispečink: "Čekám na přihlášení obou řidičů."`;
+                document.getElementById("btn-restart").classList.add("hidden");
+            } else if (player1 && !player2) {
+                msgBox.innerHTML = `Dispečink: "Místnost je obsazena hráčem <strong>${player1}</strong>. Čeká se na přihlášení druhého řidiče!"`;
+                document.getElementById("btn-restart").classList.add("hidden");
+            } else if (gameActive) {
+                const activeName = currentPlayer === 1 ? player1 : player2;
+                let turnInfo = "";
+                if (myRole === 1 || myRole === 2) {
+                    turnInfo = (myRole === currentPlayer) 
+                        ? " <span style='color: #16a34a; font-weight: bold;'>(Jsi na tahu!)</span>" 
+                        : " (Čekáš na tah soupeře...)";
+                }
+                msgBox.innerHTML = `Dispečink: "Startujeme! Kdo dřív zaparkuje 4 auta? Na tahu je <strong>${activeName}</strong>.${turnInfo}"`;
+                document.getElementById("btn-restart").classList.add("hidden");
+            } else if (winnerMsg) {
+                msgBox.innerHTML = winnerMsg;
+                document.getElementById("btn-restart").classList.remove("hidden");
+            }
+        }
+
+        // --- 5. HERNÍ FUNKCE ---
+        function registerP1() {
+            const input = document.getElementById("p1-input");
+            if (!input.value.trim()) return alert("Zadej jméno!");
+            
+            myRole = 1;
+            sessionStorage.setItem("taxiRole", "1");
+
+            gameState.player1 = input.value.trim();
+            gameState.player2 = "";
+            gameState.board = Array(16).fill(null);
+            gameState.gameActive = false;
+            gameState.winnerMsg = "";
+            input.value = "";
+
+            syncState();
+        }
+
+        function registerP2() {
+            const input = document.getElementById("p2-input");
+            if (!input.value.trim()) return alert("Zadej jméno!");
+
+            // Pokud ještě na tomto počítači nemám roli Hráče 1, stanu se Hráčem 2
+            if (myRole !== 1) {
+                myRole = 2;
+                sessionStorage.setItem("taxiRole", "2");
+            } else {
+                // Pokud zkoušíš hru sám na jednom PC v jednom okně, povolíme lokální testování
+                myRole = null;
+            }
+
+            gameState.player2 = input.value.trim();
+            gameState.currentPlayer = 1;
+            gameState.board = Array(16).fill(null);
+            gameState.gameActive = true;
+            gameState.winnerMsg = "";
+            input.value = "";
+
+            syncState();
+        }
+
+        function handleMove(e) {
+            const cell = e.target.closest('.cell');
+            if (!cell) return;
+            const index = parseInt(cell.dataset.index);
+
+            if (!gameState.gameActive || gameState.board[index] !== null) return;
+
+            // Pokud hrají dva oddělené počítače, pohlídáme, aby každý táhl jen za sebe
+            if ((myRole === 1 || myRole === 2) && myRole !== gameState.currentPlayer) {
+                alert("Teď nejsi na tahu! Na tahu je druhý počítač.");
+                return;
+            }
+
+            gameState.board[index] = gameState.currentPlayer;
+
+            if (checkWin()) {
+                const winnerName = gameState.currentPlayer === 1 ? gameState.player1 : gameState.player2;
+                gameState.gameActive = false;
+                gameState.winnerMsg = `🏆 CÍL! <strong>${winnerName}</strong> ovládl město!`;
+                syncState();
+                return;
+            }
+
+            if (!gameState.board.includes(null)) {
+                gameState.gameActive = false;
+                gameState.winnerMsg = "🚦 Remíza! Parkoviště je plné.";
+                syncState();
+                return;
+            }
+
+            gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+            syncState();
+        }
+
+        function checkWin() {
+            const b = gameState.board;
+            const lines = [
+                [0,1,2,3], [4,5,6,7], [8,9,10,11], [12,13,14,15],
+                [0,4,8,12], [1,5,9,13], [2,6,10,14], [3,7,11,15],
+                [0,5,10,15], [3,6,9,12]
+            ];
+            return lines.some(l => {
+                return b[l[0]] !== null && b[l[0]] === b[l[1]] && 
+                       b[l[0]] === b[l[2]] && b[l[0]] === b[l[3]];
+            });
+        }
+
+        function resetGame() {
+            gameState.board = Array(16).fill(null);
+            gameState.currentPlayer = 1;
+            gameState.gameActive = true;
+            gameState.winnerMsg = "";
+            syncState();
+        }
+
+        function leaveRoom() {
+            myRole = null;
+            sessionStorage.removeItem("taxiRole");
+            gameState = {
+                player1: "",
+                player2: "",
+                currentPlayer: 1,
+                board: Array(16).fill(null),
+                gameActive: false,
+                winnerMsg: "",
+                updatedAt: Date.now()
+            };
+            syncState();
+        }
+
+        // Prvotní vykreslení při načtení stránky
+        updateUI();
+    </script>
+</body>
+</html>
